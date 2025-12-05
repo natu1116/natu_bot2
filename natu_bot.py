@@ -14,12 +14,13 @@ from google.genai.errors import APIError
 # ---------------------------
 # --- 環境設定 ---
 # ---------------------------
+# 環境変数から設定を取得
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GEMINI_API_KEY_PRIMARY = os.environ.get("GEMINI_API_KEY") # Primary Key
 GEMINI_API_KEY_SECONDARY = os.environ.get("GEMINI_API_KEY_SECONDARY") # Secondary Key
 PORT = int(os.environ.get("PORT", 8080)) 
 
-# 通知チャンネルIDの取得と変換 (変更なし)
+# 通知チャンネルIDの取得と変換
 NOTIFICATION_CHANNEL_ID = os.environ.get("NOTIFICATION_CHANNEL_ID")
 if NOTIFICATION_CHANNEL_ID:
     try:
@@ -39,7 +40,9 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 gemini_clients = []
 
 def initialize_gemini_clients():
-    """設定されたAPIキーに基づいてGeminiクライアントを初期化し、リストに格納します。"""
+    """設定されたAPIキーに基づいてGeminiクライアントを初期化し、リストに格納します。
+    レート制限時のフォールバックのために複数のクライアントを準備します。
+    """
     global gemini_clients
     clients = []
     
@@ -83,7 +86,7 @@ async def on_ready():
     except Exception as e:
         print(f"DEBUG: コマンドの同期中にエラーが発生しました: {e}")
         
-    # 2. ログイン通知の送信 (変更なし)
+    # 2. ログイン通知の送信
     if NOTIFICATION_CHANNEL_ID:
         try:
             channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
@@ -117,6 +120,7 @@ async def on_ready():
 async def ai_command(interaction: discord.Interaction, prompt: str):
     """
     /ai [prompt] で呼び出され、複数のAPIキーを順に試行して応答を返すコマンド。
+    応答メッセージのリンクをログに保存します。
     """
     if not gemini_clients:
         await interaction.response.send_message(
@@ -163,28 +167,26 @@ async def ai_command(interaction: discord.Interaction, prompt: str):
     if gemini_text:
         # 成功応答
         if len(gemini_text) > 2000:
+            # メッセージが長すぎる場合は分割して送信
             initial_response = await interaction.followup.send(
                 f"**質問:** {prompt}\n(キー: {used_client_name})\n\n**AI応答 (1/2):**\n{gemini_text[:1900]}..."
             )
             remaining_text = gemini_text[1900:]
-            final_response = await interaction.channel.send(f"**AI応答 (2/2):**\n...{remaining_text}")
+            await interaction.channel.send(f"**AI応答 (2/2):**\n...{remaining_text}")
             
-            # --- ここから追加 ---
-            # 最初の応答メッセージのリンクをログに保存
+            # 応答メッセージのリンクをログに保存 (会話の起点であるinitial_responseのリンクを使用)
             message_link = initial_response.jump_url
             print(f"💾 SAVE_LINK: AIコマンドの応答メッセージリンク: {message_link} (ユーザー: {interaction.user.name}, 質問: {prompt[:50]}...)")
-            # --- ここまで追加 ---
             
         else:
+            # 通常の応答
             final_response = await interaction.followup.send(
                 f"**質問:** {prompt}\n(キー: {used_client_name})\n\n**AI応答:**\n{gemini_text}"
             )
             
-            # --- ここから追加 ---
             # 応答メッセージのリンクをログに保存
             message_link = final_response.jump_url
             print(f"💾 SAVE_LINK: AIコマンドの応答メッセージリンク: {message_link} (ユーザー: {interaction.user.name}, 質問: {prompt[:50]}...)")
-            # --- ここまで追加 ---
             
     else:
         # すべてのクライアントが失敗した場合
@@ -195,25 +197,25 @@ async def ai_command(interaction: discord.Interaction, prompt: str):
 
 
 # ----------------------------------------------------------------------
-# Webサーバーのセットアップ (変更なし)
+# Webサーバーのセットアップ
 # ----------------------------------------------------------------------
 
 async def handle_ping(request):
-# --- ここから追加 ---
+    """Renderからのヘルスチェックに応答するハンドラー。
+    応答時に現在のBotの状態をコンソールログに出力します。"""
+    
     JST = timezone(timedelta(hours=+9), 'JST')
     current_time_jst = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S %Z")
     
+    # Web Pingの情報をコンソールログに出力
     print(
         f"🌐 [Web Ping] 応答時刻: {current_time_jst} | "
         f"有効Geminiキー: {len(gemini_clients)}個 | "
         f"ステータス: OK"
     )
-    # --- ここまで追加 ---
 
-    # ヘルスチェックの応答テキスト自体は変更しません
+    # ヘルスチェックの応答テキスト
     return web.Response(text="Bot is running and ready for Gemini requests.")
-
-def setup_web_server():
 
 def setup_web_server():
     """Webサーバーを設定し、CORSを適用する関数。"""
