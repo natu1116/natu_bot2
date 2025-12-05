@@ -199,8 +199,21 @@ async def ai_command(interaction: discord.Interaction, prompt: str):
 # ----------------------------------------------------------------------
 
 async def handle_ping(request):
-    """Renderからのヘルスチェックに応答するハンドラー。"""
+# --- ここから追加 ---
+    JST = timezone(timedelta(hours=+9), 'JST')
+    current_time_jst = datetime.now(JST).strftime("%Y/%m/%d %H:%M:%S %Z")
+    
+    print(
+        f"🌐 [Web Ping] 応答時刻: {current_time_jst} | "
+        f"有効Geminiキー: {len(gemini_clients)}個 | "
+        f"ステータス: OK"
+    )
+    # --- ここまで追加 ---
+
+    # ヘルスチェックの応答テキスト自体は変更しません
     return web.Response(text="Bot is running and ready for Gemini requests.")
+
+def setup_web_server():
 
 def setup_web_server():
     """Webサーバーを設定し、CORSを適用する関数。"""
